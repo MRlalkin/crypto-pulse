@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import useSWR from 'swr';
 import { isAddress } from 'viem';
 import {
@@ -15,8 +15,9 @@ import {
   Terminal,
   Copy,
   Check,
+  Layers,
 } from 'lucide-react';
-import { WalletData } from '@/types/wallet';
+import { WalletData, SUPPORTED_CHAINS_LIST } from '@/types/wallet';
 import { Coin } from '@/types/market';
 
 const fetcher = (url: string) =>
@@ -34,6 +35,7 @@ const DEFAULT_WALLETS = [
 export const WalletInspector: React.FC = () => {
   const [addressInput, setAddressInput] = useState('');
   const [selectedAddress, setSelectedAddress] = useState<string>('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+  const [selectedChainId, setSelectedChainId] = useState<number>(1);
   const [recentWallets, setRecentWallets] = useState<string[]>(DEFAULT_WALLETS);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
@@ -84,20 +86,40 @@ export const WalletInspector: React.FC = () => {
     });
   };
 
-  // Fetch ETH current market price for USD conversion
+  // Fetch market coins for live USD conversion
   const { data: marketCoins } = useSWR<Coin[]>('/api/market', fetcher, {
     refreshInterval: 30000,
     revalidateOnFocus: false,
   });
 
-  const ethPriceUsd = React.useMemo(() => {
+  const activeChainConfig = useMemo(() => {
+    return (
+      SUPPORTED_CHAINS_LIST.find((c) => c.id === selectedChainId) ||
+      SUPPORTED_CHAINS_LIST[0]
+    );
+  }, [selectedChainId]);
+
+  // Token price calculation based on active symbol (ETH or POL)
+  const tokenPriceUsd = useMemo(() => {
+    const symbol = activeChainConfig.symbol.toLowerCase();
+    if (symbol === 'pol') {
+      const polCoin = marketCoins?.find(
+        (c) =>
+          c.symbol.toLowerCase() === 'pol' ||
+          c.symbol.toLowerCase() === 'matic' ||
+          c.id.includes('polygon')
+      );
+      return polCoin?.current_price ?? 0.42;
+    }
+
+    // Default to ETH
     const ethCoin = marketCoins?.find(
       (c) => c.symbol.toLowerCase() === 'eth' || c.id === 'ethereum'
     );
     return ethCoin?.current_price ?? 2740.5;
-  }, [marketCoins]);
+  }, [marketCoins, activeChainConfig.symbol]);
 
-  // Fetch wallet data via SWR
+  // Fetch multichain wallet data via SWR
   const {
     data: walletData,
     error: fetchError,
@@ -105,11 +127,13 @@ export const WalletInspector: React.FC = () => {
     isValidating,
     mutate,
   } = useSWR<WalletData>(
-    selectedAddress ? `/api/wallet?address=${selectedAddress}` : null,
+    selectedAddress
+      ? `/api/wallet?address=${selectedAddress}&chainId=${selectedChainId}`
+      : null,
     fetcher,
     {
       revalidateOnFocus: false,
-      dedupingInterval: 10000,
+      dedupingInterval: 8000,
     }
   );
 
@@ -123,7 +147,7 @@ export const WalletInspector: React.FC = () => {
       }
 
       if (!isAddress(addrToInspect)) {
-        setValidationError('Неверный формат адреса Ethereum (ожидается 0x... 40 hex-символов)');
+        setValidationError('Неверный формат адреса (ожидается 0x... 40 hex-символов)');
         return;
       }
 
@@ -134,6 +158,13 @@ export const WalletInspector: React.FC = () => {
     },
     [addressInput]
   );
+
+  const handleChainSelect = (chainId: number) => {
+    if (chainId !== selectedChainId) {
+      triggerHaptic('light');
+      setSelectedChainId(chainId);
+    }
+  };
 
   const handleSelectRecent = (addr: string) => {
     triggerHaptic('light');
@@ -166,8 +197,11 @@ export const WalletInspector: React.FC = () => {
     });
   };
 
+  const currentSymbol = walletData?.symbol || activeChainConfig.symbol;
+  const currentExplorer = walletData?.explorerUrl || activeChainConfig.explorerUrl;
+
   const usdValue = walletData
-    ? (parseFloat(walletData.balanceEth) * ethPriceUsd).toLocaleString('en-US', {
+    ? (parseFloat(walletData.balance) * tokenPriceUsd).toLocaleString('en-US', {
         style: 'currency',
         currency: 'USD',
       })
@@ -183,24 +217,55 @@ export const WalletInspector: React.FC = () => {
           <div className="flex items-center gap-2">
             <Terminal className="w-4 h-4 text-emerald-400 animate-pulse" />
             <span className="text-xs font-bold text-emerald-400 tracking-wider">
-              SYS.WALLET // INSPECTOR
+              SYS.WALLET // MULTICHAIN_INSPECTOR
             </span>
           </div>
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 rounded">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            RPC_MAINNET
+            {activeChainConfig.shortName.toUpperCase()}_NODE
           </span>
         </div>
 
         <div className="text-[11px] text-zinc-400 flex flex-wrap items-center justify-between border-t border-slate-800/80 pt-2">
           <span className="text-zinc-500">
-            ETH_INDEX: <span className="text-emerald-400">${ethPriceUsd.toLocaleString('en-US')}</span>
+            INDEX_{currentSymbol}: <span className="text-emerald-400">${tokenPriceUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </span>
           <span className="text-zinc-500">
-            MODE: <span className="text-zinc-200">READ_ONLY_AUDIT</span>
+            NETWORK: <span className="text-zinc-200 font-bold">{activeChainConfig.name}</span>
           </span>
         </div>
       </header>
+
+      {/* Multichain Selector Chips */}
+      <div className="mb-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mr-1 flex items-center gap-1 flex-shrink-0">
+            <Layers className="w-3 h-3 text-emerald-400" />
+            СЕТЬ:
+          </span>
+          {SUPPORTED_CHAINS_LIST.map((chain) => {
+            const isSelected = selectedChainId === chain.id;
+            return (
+              <button
+                key={chain.id}
+                onClick={() => handleChainSelect(chain.id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-mono border transition-all flex items-center gap-1.5 flex-shrink-0 ${
+                  isSelected
+                    ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.25)]'
+                    : 'bg-[#1E293B]/70 border-slate-700/80 text-zinc-400 hover:border-emerald-500/40 hover:text-zinc-200'
+                }`}
+              >
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0 shadow-[0_0_6px_currentColor]"
+                  style={{ backgroundColor: chain.color, color: chain.color }}
+                />
+                <span className="font-bold">{chain.shortName}</span>
+                <span className="text-[10px] text-zinc-500">[{chain.symbol}]</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Address Input & Search */}
       <div className="space-y-2 mb-4">
@@ -217,7 +282,7 @@ export const WalletInspector: React.FC = () => {
                 if (validationError) setValidationError(null);
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="0x... (ETH ADDRESS OR ENS)"
+              placeholder="0x... (EVM ADDRESS)"
               className="w-full bg-[#0B0E14] border border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 rounded-lg pl-9 pr-3 py-2.5 text-xs text-emerald-300 placeholder-zinc-600 outline-none transition-all shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)]"
             />
           </div>
@@ -228,7 +293,7 @@ export const WalletInspector: React.FC = () => {
             className="flex items-center justify-center gap-1.5 px-5 py-2.5 bg-[#1E293B] hover:bg-emerald-950 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_10px_rgba(16,185,129,0.15)]"
           >
             <Search className="w-3.5 h-3.5 text-emerald-400" />
-            <span>ПРО Humans/VERIFY</span>
+            <span>ПРОВЕРИТЬ // VERIFY</span>
           </button>
         </div>
 
@@ -319,34 +384,42 @@ export const WalletInspector: React.FC = () => {
             <div className="flex items-center justify-between text-xs text-zinc-400 mb-1.5">
               <span className="flex items-center gap-1.5 text-zinc-300">
                 <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                <span>NATIVE_ETH_BALANCE</span>
+                <span>NATIVE_{currentSymbol}_BALANCE</span>
               </span>
-              <span className="text-[10px] text-emerald-400 border border-emerald-800/80 bg-emerald-950/60 px-1.5 py-0.5 rounded">
-                AUDITED
+              <span className="text-[10px] text-emerald-400 border border-emerald-800/80 bg-emerald-950/60 px-2 py-0.5 rounded font-bold">
+                {activeChainConfig.name.toUpperCase()}
               </span>
             </div>
 
-            {/* ETH Balance */}
+            {/* Native Balance */}
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-3xl sm:text-4xl font-extrabold text-zinc-100 tracking-tight">
-                {walletData.balanceEth}
+                {walletData.balance}
               </span>
-              <span className="text-sm font-bold text-emerald-400">ETH</span>
+              <span className="text-sm font-bold text-emerald-400">{currentSymbol}</span>
             </div>
 
             {/* USD Conversion */}
             <div className="text-xs text-zinc-400 mt-1 flex items-center gap-2">
               <span>≈ {usdValue}</span>
-              <span className="text-[10px] text-zinc-500">(@ ${ethPriceUsd.toFixed(2)}/ETH)</span>
+              <span className="text-[10px] text-zinc-500">(@ ${tokenPriceUsd.toFixed(2)}/{currentSymbol})</span>
             </div>
 
-            {/* Address Footer */}
+            {/* Address Footer & Explorer Link */}
             <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-zinc-400">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-zinc-500 text-[10px]">ADDRESS:</span>
-                <span className="text-zinc-200 truncate font-mono text-[11px] sm:text-xs">
-                  {walletData.address}
-                </span>
+                <a
+                  href={`${currentExplorer}/address/${walletData.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => triggerHaptic('light')}
+                  className="text-zinc-200 hover:text-emerald-300 truncate font-mono text-[11px] sm:text-xs flex items-center gap-1 transition-colors"
+                  title="Открыть адрес в блокчейн-эксплорере"
+                >
+                  <span className="truncate max-w-[200px] sm:max-w-[320px]">{walletData.address}</span>
+                  <ExternalLink className="w-3 h-3 text-zinc-500 hover:text-emerald-400 flex-shrink-0" />
+                </a>
               </div>
               <button
                 onClick={() => handleCopy(walletData.address)}
@@ -367,7 +440,7 @@ export const WalletInspector: React.FC = () => {
             <div className="flex items-center justify-between text-xs text-zinc-400 mb-2.5">
               <span className="flex items-center gap-1.5 text-zinc-300 font-bold">
                 <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                <span>ПОСЛЕДНИЕ 5 ТРАНЗАКЦИЙ (ETHERSCAN)</span>
+                <span>ПОСЛЕДНИЕ 5 ТРАНЗАКЦИЙ ({activeChainConfig.shortName.toUpperCase()})</span>
               </span>
               <span className="text-[10px] text-zinc-500">LIMIT: 5 TX</span>
             </div>
@@ -425,7 +498,7 @@ export const WalletInspector: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Right: Amount & Etherscan Link */}
+                      {/* Right: Amount & Explorer Link */}
                       <div className="text-right flex-shrink-0 space-y-1">
                         <div
                           className={`font-bold text-xs ${
@@ -433,16 +506,16 @@ export const WalletInspector: React.FC = () => {
                           }`}
                         >
                           {tx.isIncoming ? '+' : '-'}
-                          {tx.value} ETH
+                          {tx.value} {currentSymbol}
                         </div>
 
                         <a
-                          href={`https://etherscan.io/tx/${tx.hash}`}
+                          href={`${currentExplorer}/tx/${tx.hash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => triggerHaptic('light')}
                           className="inline-flex items-center gap-1 text-[10px] text-zinc-400 hover:text-emerald-300 transition-colors border border-slate-700/80 hover:border-emerald-500/50 bg-[#0B0E14] px-1.5 py-0.5 rounded"
-                          title="Открыть в Etherscan"
+                          title={`Открыть в ${activeChainConfig.shortName} Explorer`}
                         >
                           <span className="font-mono">{tx.hash.slice(0, 6)}...</span>
                           <ExternalLink className="w-2.5 h-2.5" />

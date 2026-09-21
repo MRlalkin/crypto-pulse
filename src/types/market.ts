@@ -19,7 +19,7 @@ export interface Coin {
   last_updated?: string;
 }
 
-export type FilterSortType = 'market_cap' | 'gainers' | 'losers';
+export type FilterSortType = 'market_cap' | 'gainers' | 'losers' | 'watchlist';
 
 export interface FilterSort {
   type: FilterSortType;

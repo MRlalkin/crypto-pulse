@@ -26,25 +26,37 @@
 
 ### 🚀 Основные возможности
 
-#### 1. 📈 Market Pulse (Экран рынка)
+#### 1. 📈 Market Pulse (Экран рынка & Watchlist)
 - **Топ-20 криптовалют в реальном времени**: получение свежих котировок, суточных объемов и рыночной капитализации через CoinGecko API.
 - **Серверное кэширование на 30 секунд**: роут `/api/market` с директивами `next: { revalidate: 30 }` и заголовками `Cache-Control`.
 - **Отказоустойчивый fallback-кэш**: гарантирует бесперебойную работу интерфейса даже при жестких лимитах CoinGecko (HTTP 429).
 - **Живой мгновенный поиск**: фильтрация списка по тикеру (`BTC`, `SOL`, `ETH`) или названию.
+- **⭐ Персональный Watchlist**:
+  - Сохранение массива избранных монет в `localStorage`;
+  - Интерактивная иконка Star (золотая при добавлении, контурная при неактивном состоянии) с виброоткликом `triggerHaptic('medium')`;
+  - 4-й фильтр **«⭐ Watchlist»** с бейджем количества сохраненных токенов;
+  - Стилизованный Dark Terminal Empty State при пустом списке избранного.
 - **Интерактивные фильтры**:
   - `Капитализация` (сортировка по рангу CoinGecko);
   - `Рост (24h)` (сортировка по наибольшему % роста);
-  - `Падение (24h)` (сортировка по наибольшему % падения).
-- **Синхронизация через SWR**: автоматическое фоновое обновление и кнопка ручного рефреша с анимацией спиннера и виброоткликом.
+  - `Падение (24h)` (сортировка по наибольшему % падения);
+  - `⭐ Watchlist` (только выбранные пользователем активы).
+- **Синхронизация через SWR**: автоматическое фоновое обновление и кнопка ручного рефреша со спиннером и виброоткликом.
 
-#### 2. 🔍 Wallet Inspector (Аудит кошельков)
-- **Валидация адресов через viem**: строгая проверка формата адреса Ethereum как на клиенте, так и на сервере (`isAddress`).
-- **Нативный баланс ETH через RPC**: получение точного баланса в реальном времени через публичный RPC Ethereum (`createPublicClient`, `http`, `formatEther`).
-- **Конвертация в USD**: автоматический пересчет баланса в доллары США по текущему биржевому курсу ETH из `/api/market`.
-- **Последние 5 транзакций Etherscan**:
-  - Направление перевода (зеленая стрелка вниз — входящая, красная вверх — исходящая);
-  - Форматированная сумма в ETH, дата и время;
-  - Прямой переход к транзакции на Etherscan в один клик.
+#### 2. 🔍 Wallet Inspector (Мультичейн аудит кошельков)
+- **Поддержка 4 EVM сетей через viem/chains**:
+  - **Ethereum Mainnet** (Chain ID: 1, нативный токен: `ETH`, эксплорер: `etherscan.io`);
+  - **Base** (Chain ID: 8453, токен: `ETH`, эксплорер: `basescan.org`, RPC: `mainnet.base.org`);
+  - **Arbitrum One** (Chain ID: 42161, токен: `ETH`, эксплорер: `arbiscan.io`, RPC: `arb1.arbitrum.io/rpc`);
+  - **Polygon** (Chain ID: 137, токен: `POL`, эксплорер: `polygonscan.com`, RPC: `polygon-rpc.com`).
+- **Интерактивный селектор сетей**: чипы переключения чейнов с фирменными цветами и виброоткликом `triggerHaptic('light')`.
+- **Валидация адресов через viem**: строгая проверка формата адреса на клиенте и сервере (`isAddress`).
+- **Нативный баланс через RPC**: запрос баланса в реальном времени под выбранную сеть (`createPublicClient`, `http`, `formatEther`).
+- **Конвертация в USD**: автоматический пересчет баланса в доллары США по живому курсу соответствующего токена (`ETH` или `POL`).
+- **Транзакции и динамические ссылки**:
+  - Последние 5 транзакций с индикацией направления (зеленая стрелка вниз — входящая, красная вверх — исходящая);
+  - Форматированная сумма в нативном токене сети (`ETH` или `POL`), дата и время;
+  - Прямые ссылки на хэш и адрес кошелька в эксплорере выбранной сети (`Etherscan`, `Basescan`, `Arbiscan`, `Polygonscan`).
 - **Недавние кошельки**: сохранение последних 3 проверенных адресов в `localStorage` с интерактивными чипами.
 - **Копирование адреса**: копирование полного адреса в буфер обмена в один клик.
 - **Обработка состояний**: скелетоны загрузки (`animate-pulse`) и информативные баннеры ошибок.
@@ -58,7 +70,7 @@
   - RPC Provider: `ethereum-rpc.publicnode.com`;
   - Динамический замер задержки RPC в миллисекундах.
 - **Комьюнити-кнопка**: ссылка на Telegram-канал/чат с неоновым изумрудным свечением и виброоткликом.
-- **Версия приложения**: `v1.0.0 (MVP)`.
+- **Версия приложения**: `v1.1.0 (Multichain & Watchlist)`.
 
 #### 4. 🎮 Интеграция с Telegram WebApp
 - Нижняя панель навигации **BottomNav** с табами: *Рынок*, *Кошелек*, *Профиль*.
@@ -158,25 +170,37 @@ npm run start
 
 ### 🚀 Key Features
 
-#### 1. 📈 Market Pulse (Market Radar)
+#### 1. 📈 Market Pulse (Market Radar & Watchlist)
 - **Real-Time Top 20 Coins**: Instant cryptocurrency prices, 24h market performance, and market cap from CoinGecko.
 - **30-Second Server Cache**: Dedicated `/api/market` endpoint with Next.js route caching (`revalidate: 30`) and `Cache-Control` headers.
 - **Zero-Downtime Fallback Cache**: Built-in memory fallback protecting the user interface from CoinGecko public rate limits (HTTP 429).
 - **Instant Live Search**: Search and filter instantly by symbol (`BTC`, `ETH`, `SOL`) or project name.
+- **⭐ Personal Watchlist**:
+  - Persistent watchlist storage in `localStorage`;
+  - Interactive Star icon (yellow filled when active, outline when inactive) with `triggerHaptic('medium')`;
+  - 4th filter tab **«⭐ Watchlist»** with dynamic token counter;
+  - Dark Terminal Empty State with quick shortcut to return to full market view.
 - **Interactive Sorting Filters**:
   - `Market Cap` (sorted by official CoinGecko rank);
   - `Gainers (24h)` (sorted by highest percentage gain);
-  - `Losers (24h)` (sorted by highest percentage drop).
+  - `Losers (24h)` (sorted by highest percentage drop);
+  - `⭐ Watchlist` (user-curated assets only).
 - **SWR-Powered State**: Automatic background revalidation and a manual refresh trigger with spinner animation and haptic vibration.
 
-#### 2. 🔍 Wallet Inspector (On-Chain Audit)
+#### 2. 🔍 Wallet Inspector (Multichain On-Chain Audit)
+- **4 Supported EVM Networks via viem/chains**:
+  - **Ethereum Mainnet** (Chain ID: 1, native token: `ETH`, explorer: `etherscan.io`);
+  - **Base** (Chain ID: 8453, token: `ETH`, explorer: `basescan.org`, RPC: `mainnet.base.org`);
+  - **Arbitrum One** (Chain ID: 42161, token: `ETH`, explorer: `arbiscan.io`, RPC: `arb1.arbitrum.io/rpc`);
+  - **Polygon** (Chain ID: 137, token: `POL`, explorer: `polygonscan.com`, RPC: `polygon-rpc.com`).
+- **Chain Selector Chips**: One-tap network switching with brand-colored indicators and `triggerHaptic('light')`.
 - **Viem-Powered Address Validation**: Rigorous client and server-side address validation using `isAddress` from viem.
-- **Native ETH Balance via Public RPC**: Direct on-chain balance queries via Ethereum JSON-RPC (`createPublicClient`, `http`, `formatEther`).
-- **Real-Time USD Conversion**: Live calculation of wallet valuation in USD using the current ETH index from `/api/market`.
-- **Last 5 Etherscan Transactions**:
+- **Native Balance via Public RPC**: Direct on-chain balance queries for the active chain (`createPublicClient`, `http`, `formatEther`).
+- **Real-Time USD Valuation**: Live calculation in USD using the current market price for `ETH` or `POL`.
+- **Last 5 Transactions & Dynamic Explorer Links**:
   - Transaction direction (green down-arrow for incoming, coral up-arrow for outgoing);
-  - Formatted ETH amount, relative and absolute timestamps;
-  - One-click direct link to Etherscan explorer.
+  - Formatted native amount (`ETH` or `POL`), relative and absolute timestamps;
+  - Dynamic links directly to the selected network's explorer (`Etherscan`, `Basescan`, `Arbiscan`, `Polygonscan`).
 - **Recent Wallets History**: Stores up to 3 recently audited wallets in `localStorage` with clickable chips (`0x12...ab34`).
 - **One-Click Copy**: Copy address to clipboard with visual confirmation.
 - **Resilient States**: Terminal `animate-pulse` skeletons and distinct error banners for invalid addresses or network drops.
@@ -190,7 +214,7 @@ npm run start
   - Public Node: `ethereum-rpc.publicnode.com`;
   - Live latency indicator in milliseconds.
 - **Community Portal**: Neon-glowing button linking directly to the official Telegram community with haptic feedback.
-- **Application Version**: `v1.0.0 (MVP)`.
+- **Application Version**: `v1.1.0 (Multichain & Watchlist)`.
 
 #### 4. 🎮 Telegram Native Experience
 - Fixed **BottomNav** bar with 3 core tabs: *Market*, *Wallet*, *Profile*.

@@ -1,9 +1,17 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import useSWR from 'swr';
 import Image from 'next/image';
-import { RefreshCw, Search, TrendingUp, TrendingDown, Layers, Terminal, AlertCircle } from 'lucide-react';
+import {
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Layers,
+  Terminal,
+  AlertCircle,
+  Star,
+} from 'lucide-react';
 import { Coin, FilterSortType } from '@/types/market';
 
 const fetcher = async (url: string): Promise<Coin[]> => {
@@ -17,7 +25,46 @@ const fetcher = async (url: string): Promise<Coin[]> => {
 export const MarketPulse: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterSortType>('market_cap');
+  const [watchlist, setWatchlist] = useState<string[]>([]);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  // Load watchlist from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('crypto_pulse_watchlist');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setWatchlist(parsed);
+        }
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  const toggleWatchlist = (coinId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    // Trigger medium haptic feedback
+    if (typeof window !== 'undefined' && window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+    } else if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(20);
+    }
+
+    setWatchlist((prev) => {
+      const updated = prev.includes(coinId)
+        ? prev.filter((id) => id !== coinId)
+        : [...prev, coinId];
+      try {
+        localStorage.setItem('crypto_pulse_watchlist', JSON.stringify(updated));
+      } catch {
+        // Ignore
+      }
+      return updated;
+    });
+  };
 
   const {
     data: coins,
@@ -32,7 +79,6 @@ export const MarketPulse: React.FC = () => {
   });
 
   const handleRefresh = async () => {
-    // Trigger haptic if in Telegram
     if (typeof window !== 'undefined' && window.Telegram?.WebApp?.HapticFeedback) {
       window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
     }
@@ -51,6 +97,11 @@ export const MarketPulse: React.FC = () => {
     if (!coins) return [];
 
     let filtered = coins;
+
+    // Filter by Watchlist if tab is active
+    if (activeFilter === 'watchlist') {
+      filtered = filtered.filter((c) => watchlist.includes(c.id));
+    }
 
     // Filter by search query
     const q = searchQuery.trim().toLowerCase();
@@ -77,12 +128,12 @@ export const MarketPulse: React.FC = () => {
           (b.price_change_percentage_24h ?? 0)
       );
     } else {
-      // market_cap
+      // market_cap or watchlist defaults to rank
       sorted.sort((a, b) => (a.market_cap_rank ?? 999) - (b.market_cap_rank ?? 999));
     }
 
     return sorted;
-  }, [coins, searchQuery, activeFilter]);
+  }, [coins, searchQuery, activeFilter, watchlist]);
 
   // Format currency helpers
   const formatPrice = (price: number) => {
@@ -154,10 +205,10 @@ export const MarketPulse: React.FC = () => {
             NET: <span className="text-emerald-400">MAINNET_FEED</span>
           </span>
           <span className="text-zinc-500">
-            RECORDS: <span className="text-zinc-200">{processedCoins.length}/20</span>
+            SHOWING: <span className="text-zinc-200">{processedCoins.length} TOKENS</span>
           </span>
           <span className="text-zinc-500">
-            CACHE: <span className="text-emerald-400">30s TTL</span>
+            WATCHLIST: <span className="text-amber-400">{watchlist.length} SAVED</span>
           </span>
         </div>
       </header>
@@ -184,11 +235,11 @@ export const MarketPulse: React.FC = () => {
         )}
       </div>
 
-      {/* Filter Tabs */}
+      {/* Filter Tabs (including ⭐ Watchlist) */}
       <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1 scrollbar-none">
         <button
           onClick={() => handleFilterChange('market_cap')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all flex-shrink-0 ${
             activeFilter === 'market_cap'
               ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
               : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
@@ -200,7 +251,7 @@ export const MarketPulse: React.FC = () => {
 
         <button
           onClick={() => handleFilterChange('gainers')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all flex-shrink-0 ${
             activeFilter === 'gainers'
               ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
               : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
@@ -212,7 +263,7 @@ export const MarketPulse: React.FC = () => {
 
         <button
           onClick={() => handleFilterChange('losers')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all flex-shrink-0 ${
             activeFilter === 'losers'
               ? 'bg-rose-950/50 border-rose-500/80 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.2)]'
               : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
@@ -220,6 +271,30 @@ export const MarketPulse: React.FC = () => {
         >
           <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
           <span>Падение (24h)</span>
+        </button>
+
+        {/* 4th Tab: ⭐ Watchlist */}
+        <button
+          onClick={() => handleFilterChange('watchlist')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all flex-shrink-0 ${
+            activeFilter === 'watchlist'
+              ? 'bg-amber-950/60 border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+              : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-amber-500/40 hover:text-zinc-200'
+          }`}
+        >
+          <Star
+            className={`w-3.5 h-3.5 ${
+              activeFilter === 'watchlist'
+                ? 'text-amber-400 fill-amber-400'
+                : 'text-zinc-400'
+            }`}
+          />
+          <span>⭐ Watchlist</span>
+          {watchlist.length > 0 && (
+            <span className="text-[10px] px-1.5 py-0.2 bg-amber-900/80 text-amber-300 rounded font-bold">
+              {watchlist.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -270,13 +345,38 @@ export const MarketPulse: React.FC = () => {
         </div>
       )}
 
-      {/* Empty Search Result */}
-      {!isLoading && processedCoins.length === 0 && (
-        <div className="p-8 text-center bg-zinc-950 border border-dashed border-zinc-800 rounded-lg text-zinc-500 text-xs">
-          <p className="text-emerald-400 mb-1">&gt; 404: NO_COINS_MATCHING_CRITERIA</p>
-          <p className="text-[11px]">Query: &quot;{searchQuery}&quot;</p>
+      {/* Watchlist Empty State */}
+      {!isLoading && activeFilter === 'watchlist' && watchlist.length === 0 && (
+        <div className="p-8 text-center bg-zinc-950 border border-dashed border-amber-500/40 rounded-lg space-y-3 my-4">
+          <div className="w-12 h-12 rounded-full bg-amber-950/40 border border-amber-500/50 flex items-center justify-center mx-auto text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+            <Star className="w-6 h-6 text-amber-400 fill-amber-400/20" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-amber-400 font-mono">
+              &gt; WATCHLIST_EMPTY // NO_RECORDS
+            </p>
+            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+              В избранном пока ничего нет. Нажмите на звёздочку рядом с монетой.
+            </p>
+          </div>
+          <button
+            onClick={() => handleFilterChange('market_cap')}
+            className="mt-2 px-3.5 py-1.5 bg-zinc-900 hover:bg-amber-950/50 border border-zinc-700 hover:border-amber-500/50 rounded text-xs text-amber-300 font-mono transition-all"
+          >
+            [ &gt; ПОКАЗАТЬ ВСЕ МОНЕТЫ ]
+          </button>
         </div>
       )}
+
+      {/* Empty Search Result */}
+      {!isLoading &&
+        processedCoins.length === 0 &&
+        !(activeFilter === 'watchlist' && watchlist.length === 0) && (
+          <div className="p-8 text-center bg-zinc-950 border border-dashed border-zinc-800 rounded-lg text-zinc-500 text-xs">
+            <p className="text-emerald-400 mb-1">&gt; 404: NO_COINS_MATCHING_CRITERIA</p>
+            <p className="text-[11px]">Query: &quot;{searchQuery}&quot;</p>
+          </div>
+        )}
 
       {/* Coins List */}
       {!isLoading && (
@@ -286,16 +386,33 @@ export const MarketPulse: React.FC = () => {
             const changeFormatted = `${isPositive ? '+' : ''}${(
               coin.price_change_percentage_24h ?? 0
             ).toFixed(2)}%`;
+            const isFavorite = watchlist.includes(coin.id);
 
             return (
               <div
                 key={coin.id}
                 className="group p-3 bg-zinc-950 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-emerald-500/50 rounded-lg transition-all flex items-center justify-between gap-2 relative overflow-hidden"
               >
-                {/* Left side: Rank, Icon, Symbol, Name */}
-                <div className="flex items-center gap-2.5 min-w-0">
+                {/* Left side: Star, Rank, Icon, Symbol, Name */}
+                <div className="flex items-center gap-2 min-w-0">
+                  {/* Star Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => toggleWatchlist(coin.id, e)}
+                    className="p-1 text-zinc-600 hover:text-amber-400 transition-colors flex-shrink-0"
+                    title={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
+                  >
+                    <Star
+                      className={`w-4 h-4 transition-all ${
+                        isFavorite
+                          ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)] scale-110'
+                          : 'text-zinc-600 hover:text-zinc-400'
+                      }`}
+                    />
+                  </button>
+
                   {/* Rank */}
-                  <span className="text-[10px] text-zinc-600 group-hover:text-emerald-500/80 w-6 font-bold">
+                  <span className="text-[10px] text-zinc-600 group-hover:text-emerald-500/80 w-5 font-bold flex-shrink-0">
                     #{String(coin.market_cap_rank ?? '--').padStart(2, '0')}
                   </span>
 
@@ -327,7 +444,7 @@ export const MarketPulse: React.FC = () => {
                       </span>
                       <span className="text-[10px] text-zinc-500">/USD</span>
                     </div>
-                    <p className="text-[11px] text-zinc-500 truncate max-w-[110px] sm:max-w-[180px]">
+                    <p className="text-[11px] text-zinc-500 truncate max-w-[100px] sm:max-w-[170px]">
                       {coin.name}
                     </p>
                   </div>
@@ -366,10 +483,10 @@ export const MarketPulse: React.FC = () => {
       <footer className="mt-6 pt-3 border-t border-zinc-900 text-center text-[10px] text-zinc-600 flex flex-col items-center gap-1">
         <div className="flex items-center gap-2">
           <span className="text-emerald-500">&gt;&gt;</span>
-          <span>CRYPTO_PULSE COINGECKO FEED TERMINAL</span>
+          <span>CRYPTO_PULSE COINGECKO FEED TERMINAL v1.1</span>
           <span className="text-emerald-500">&lt;&lt;</span>
         </div>
-        <p className="text-zinc-700">SECURE DISPATCH // TELEGRAM WEBAPP READY</p>
+        <p className="text-zinc-700">WATCHLIST PERSISTENCE // TELEGRAM WEBAPP READY</p>
       </footer>
     </section>
   );
